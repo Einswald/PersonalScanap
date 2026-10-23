@@ -62,4 +62,9 @@ class CaptureViewModel : ViewModel() {
     fun resetState() {
         _uiState.value = CaptureUiState.Idle
     }
+
+    fun reportError(message: String) {
+        _uiState.value = CaptureUiState.Error(message)
+    }
+
 }

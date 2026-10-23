@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -66,8 +67,7 @@ class FileStorageRepository(private val context: Context) {
             arrayOf("application/pdf"),
             null
         )
-        return Uri.fromFile(file)
-    }
+        return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)    }
 
     private companion object {
         const val FOLDER = "ScanApp"

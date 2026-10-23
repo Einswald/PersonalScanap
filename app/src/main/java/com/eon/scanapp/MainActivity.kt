@@ -25,13 +25,14 @@ import com.eon.scanapp.ui.ScanSessionViewModel
 import com.eon.scanapp.ui.capture.CaptureScreen
 import com.eon.scanapp.ui.crop.CropScreen
 import com.eon.scanapp.ui.pagelist.PageListScreen
+import com.eon.scanapp.ui.result.SaveResultScreen
 import java.io.File
 
 class MainActivity : ComponentActivity() {
 
     private val session: ScanSessionViewModel by viewModels()
 
-    private enum class Screen { CAPTURE, CROP, LIST }
+    private enum class Screen { CAPTURE, CROP, LIST, RESULT }
 
     private val legacyStoragePermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -56,23 +57,17 @@ class MainActivity : ComponentActivity() {
                 var capturedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
 
                 LaunchedEffect(saveState) {
-                    when (val s = saveState) {
-                        is SaveState.Saved -> {
-                            Toast.makeText(context, "Tersimpan di Documents/ScanApp", Toast.LENGTH_LONG).show()
-                            session.resetSaveState()
-                            screen = Screen.CAPTURE
-                        }
-                        is SaveState.Error -> {
-                            Toast.makeText(context, s.message, Toast.LENGTH_LONG).show()
-                            session.resetSaveState()
-                        }
-                        else -> Unit
+                    val s = saveState
+                    if (s is SaveState.Error) {
+                        Toast.makeText(context, s.message, Toast.LENGTH_LONG).show()
+                        session.resetSaveState()
                     }
                 }
 
-                // Layar efektif: tahan state yang tidak valid (mis. daftar kosong setelah proses app dimatikan sistem)
+                val saved = saveState as? SaveState.Saved
                 val pending = capturedUri
                 val current = when {
+                    saved != null -> Screen.RESULT
                     screen == Screen.CROP && pending != null -> Screen.CROP
                     screen == Screen.LIST && pages.isNotEmpty() -> Screen.LIST
                     else -> Screen.CAPTURE
@@ -93,7 +88,7 @@ class MainActivity : ComponentActivity() {
                     Screen.CROP -> CropScreen(
                         sourceUri = pending!!,
                         onCropped = { cropped ->
-                            pending.path?.let { File(it).delete() } // foto asli tidak diperlukan lagi
+                            pending.path?.let { File(it).delete() }
                             session.addPage(cropped)
                             capturedUri = null
                             screen = Screen.LIST
@@ -113,6 +108,14 @@ class MainActivity : ComponentActivity() {
                         onGenerate = session::generateAndSave,
                         onDiscardAll = {
                             session.discardAll()
+                            screen = Screen.CAPTURE
+                        }
+                    )
+
+                    Screen.RESULT -> SaveResultScreen(
+                        uri = saved!!.uri,
+                        onDone = {
+                            session.resetSaveState()
                             screen = Screen.CAPTURE
                         }
                     )

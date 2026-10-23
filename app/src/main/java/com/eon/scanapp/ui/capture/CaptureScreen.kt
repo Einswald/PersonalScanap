@@ -3,6 +3,7 @@ package com.eon.scanapp.ui.capture
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
@@ -27,6 +28,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.eon.scanapp.R
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,6 +40,13 @@ fun CaptureScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(uiState) {
+        if (uiState is CaptureUiState.Error) {
+            delay(3000)
+            viewModel.resetState()
+        }
+    }
 
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -84,24 +93,21 @@ fun CaptureScreen(
                         val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
 
                         cameraProviderFuture.addListener({
-                            val cameraProvider = cameraProviderFuture.get()
-                            val preview = Preview.Builder().build().also {
-                                it.setSurfaceProvider(previewView.surfaceProvider)
-                            }
-
-                            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-
                             try {
+                                val cameraProvider = cameraProviderFuture.get()
+                                val preview = Preview.Builder().build().also {
+                                    it.setSurfaceProvider(previewView.surfaceProvider)
+                                }
                                 cameraProvider.unbindAll()
                                 cameraProvider.bindToLifecycle(
                                     lifecycleOwner,
-                                    cameraSelector,
+                                    CameraSelector.DEFAULT_BACK_CAMERA,
                                     preview,
                                     imageCapture
                                 )
                             } catch (e: Exception) {
-                                // Log error binding — device tertentu bisa gagal bind,
-                                // penting di-log supaya kamu tahu device mana yang bermasalah
+                                Log.e("CaptureScreen", "Gagal menyalakan kamera", e)
+                                viewModel.reportError("Kamera gagal dinyalakan: ${e.message ?: "tidak diketahui"}")
                             }
                         }, ContextCompat.getMainExecutor(ctx))
 
@@ -123,8 +129,8 @@ fun CaptureScreen(
                 ) {
                     FloatingActionButton(
                         onClick = {
-                            viewModel.capturePhoto(context, imageCapture) { uri ->
-                                onPhotoCaptured(uri)
+                            if (uiState !is CaptureUiState.Capturing) {
+                                viewModel.capturePhoto(context, imageCapture) { uri -> onPhotoCaptured(uri) }
                             }
                         },
                         modifier = Modifier.size(72.dp)
