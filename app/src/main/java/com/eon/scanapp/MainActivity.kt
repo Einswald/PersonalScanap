@@ -2,42 +2,27 @@ package com.eon.scanapp
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import com.eon.scanapp.ui.SaveState
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.eon.scanapp.ui.ScanSessionViewModel
-import com.eon.scanapp.ui.capture.CaptureScreen
-import com.eon.scanapp.ui.crop.CropScreen
-import com.eon.scanapp.ui.pagelist.PageListScreen
-import com.eon.scanapp.ui.result.SaveResultScreen
-import java.io.File
+import com.eon.scanapp.ui.navigation.AppNavHost
 
 class MainActivity : ComponentActivity() {
 
     private val session: ScanSessionViewModel by viewModels()
 
-    private enum class Screen { CAPTURE, CROP, LIST, RESULT }
-
     private val legacyStoragePermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
@@ -49,77 +34,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                val context = LocalContext.current
-                val pages by session.pages.collectAsState()
-                val saveState by session.saveState.collectAsState()
-
-                var screen by rememberSaveable { mutableStateOf(Screen.CAPTURE) }
-                var capturedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
-
-                LaunchedEffect(saveState) {
-                    val s = saveState
-                    if (s is SaveState.Error) {
-                        Toast.makeText(context, s.message, Toast.LENGTH_LONG).show()
-                        session.resetSaveState()
-                    }
-                }
-
-                val saved = saveState as? SaveState.Saved
-                val pending = capturedUri
-                val current = when {
-                    saved != null -> Screen.RESULT
-                    screen == Screen.CROP && pending != null -> Screen.CROP
-                    screen == Screen.LIST && pages.isNotEmpty() -> Screen.LIST
-                    else -> Screen.CAPTURE
-                }
-
-                when (current) {
-                    Screen.CAPTURE -> {
-                        BackHandler(enabled = pages.isNotEmpty()) { screen = Screen.LIST }
-                        CaptureScreen(
-                            onPhotoCaptured = { uri ->
-                                capturedUri = uri
-                                screen = Screen.CROP
-                            },
-                            onNavigateBack = { finish() }
-                        )
-                    }
-
-                    Screen.CROP -> CropScreen(
-                        sourceUri = pending!!,
-                        onCropped = { cropped ->
-                            pending.path?.let { File(it).delete() }
-                            session.addPage(cropped)
-                            capturedUri = null
-                            screen = Screen.LIST
-                        },
-                        onCancel = {
-                            pending.path?.let { File(it).delete() }
-                            capturedUri = null
-                            screen = Screen.CAPTURE
-                        }
-                    )
-
-                    Screen.LIST -> PageListScreen(
-                        pages = pages,
-                        isSaving = saveState is SaveState.Saving,
-                        onAddPage = { screen = Screen.CAPTURE },
-                        onRemovePage = session::removePage,
-                        onGenerate = session::generateAndSave,
-                        onDiscardAll = {
-                            session.discardAll()
-                            screen = Screen.CAPTURE
-                        }
-                    )
-
-                    Screen.RESULT -> SaveResultScreen(
-                        uri = saved!!.uri,
-                        onDone = {
-                            session.resetSaveState()
-                            screen = Screen.CAPTURE
-                        }
-                    )
-                }
+                AppNavHost(session)
             }
         }
     }
